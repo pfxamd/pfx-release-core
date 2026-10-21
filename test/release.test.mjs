@@ -33,6 +33,8 @@ test('Safety validation rejects bad paths and version loops',()=>{
  assert.throws(()=>validateConfig({...p,badgePath:'../x.svg'}));
  assert.throws(()=>validateConfig({...p,sourcePaths:['.']}));
  assert.throws(()=>validateConfig({...p,sourcePaths:['src','package.json']}));
+ assert.equal(validateConfig({...p,allowGeneratedSourcePaths:true,sourcePaths:['src','package.json']}).allowGeneratedSourcePaths,true);
+ assert.throws(()=>validateConfig({...p,allowGeneratedSourcePaths:true,sourcePaths:['src','package.json'],ignoreSubjects:[]}));
 });
 
 test('Source changes advance; metadata-only changes do not',()=>withGitRepo(({dir,commit})=>{

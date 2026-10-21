@@ -37,7 +37,7 @@ Run `init` after a Git commit has been created. The command sets the current HEA
 - `check` is read-only and exits nonzero if generated files are outdated.
 - `version.json` carries the source commit SHA, channel, label and source date.
 - `ignoreSubjects` excludes exact automated metadata subjects.
-- Shallow Git history is rejected. CI clones should fetch full Git history (`fetch-depth: 0`).
+- A legacy project can opt into counting generated manifest paths by setting `allowGeneratedSourcePaths: true` while retaining the exact excluded sync commit subject.\n- Shallow Git history is rejected. CI clones should fetch full Git history (`fetch-depth: 0`).
 
 See [example configuration](examples/release.config.json). All commands accept `--root PATH` and `--config PATH`; `init` also takes `--kind core|app|library`.
 

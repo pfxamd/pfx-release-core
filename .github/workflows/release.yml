@@ -2,33 +2,46 @@ name: Publish versioned archive
 
 on:
   push:
-    tags:
-      - 'v*'
+    tags: ['v*']
+  workflow_run:
+    workflows: ['Verify and sync release']
+    types: [completed]
 
 permissions:
   contents: write
 
+concurrency:
+  group: release-core-publish
+  cancel-in-progress: false
+
 jobs:
   publish:
+    if: github.event_name == 'push' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout full history
+      - name: Checkout release source
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event_name == 'workflow_run' && 'main' || github.ref }}
           fetch-depth: 0
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
       - name: Verify source and metadata
+        id: version
         shell: bash
         run: |
           set -euo pipefail
           npm run check
           node bin/pfx-release.mjs check
-          TAG_VERSION="${GITHUB_REF_NAME#v}"
-          CURRENT_VERSION="$(node -p 'JSON.parse(require("node:fs").readFileSync("version.json","utf8")).version')"
-          test "$TAG_VERSION" = "$CURRENT_VERSION"
+          VERSION="$(node -p 'JSON.parse(require("node:fs").readFileSync("version.json","utf8")).version')"
+          TAG="v$VERSION"
+          if [ "$GITHUB_EVENT_NAME" = 'push' ] && [ "$TAG" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag version does not match source metadata"
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
       - name: Build release archive
         shell: bash
         run: |
@@ -40,7 +53,16 @@ jobs:
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
         shell: bash
         run: |
           set -euo pipefail
-          gh release create "$GITHUB_REF_NAME" dist/*.tgz dist/SHA256SUMS.txt --title "PFx Release Core $GITHUB_REF_NAME" --notes-file CHANGELOG.md --verify-tag
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Release already published: $RELEASE_TAG"
+            exit 0
+          fi
+          if [ "$GITHUB_EVENT_NAME" = 'push' ]; then
+            gh release create "$RELEASE_TAG" dist/*.tgz dist/SHA256SUMS.txt --title "PFx Release Core $RELEASE_TAG" --notes-file CHANGELOG.md --prerelease --verify-tag --latest=false
+          else
+            gh release create "$RELEASE_TAG" dist/*.tgz dist/SHA256SUMS.txt --title "PFx Release Core $RELEASE_TAG" --notes-file CHANGELOG.md --prerelease --target "$(git rev-parse HEAD)" --latest=false
+          fi

@@ -54,7 +54,8 @@ export function validateConfig(raw) {
     channel: raw.channel, baseVersion: raw.baseVersion, baseline: raw.baseline,
     sourcePaths: raw.sourcePaths, jsonVersions: raw.jsonVersions || [],
     metadataPath: raw.metadataPath || 'version.json', badgePath: raw.badgePath || 'version-badge.svg',
-    changelogPath: raw.changelogPath || 'CHANGELOG.md', ignoreSubjects: raw.ignoreSubjects || [SYNC_MESSAGE]
+    changelogPath: raw.changelogPath || 'CHANGELOG.md', ignoreSubjects: raw.ignoreSubjects || [SYNC_MESSAGE],
+    allowGeneratedSourcePaths: raw.allowGeneratedSourcePaths === true
   };
   if (cfg.schemaVersion !== 1 || !['core','app','library'].includes(cfg.kind) ||
       typeof cfg.product !== 'string' || !cfg.product.trim() || !CHANNELS.has(cfg.channel) ||
@@ -69,8 +70,11 @@ export function validateConfig(raw) {
       cfg.ignoreSubjects.some(s => typeof s !== 'string')) throw new Error('Unsafe or empty release paths');
   const outputs = [cfg.metadataPath,cfg.badgePath,cfg.changelogPath,...cfg.jsonVersions];
   if (new Set(outputs).size !== outputs.length) throw new Error('Duplicate release output paths');
-  if (outputs.some(path => cfg.sourcePaths.some(src => path === src || path.startsWith(src + '/')))) {
-    throw new Error('Generated release output is inside sourcePaths (would self-increment)');
+  if (!cfg.allowGeneratedSourcePaths && outputs.some(path => cfg.sourcePaths.some(src => path === src || path.startsWith(src + '/')))) {
+    throw new Error('Generated release output is inside sourcePaths');
+  }
+  if (cfg.allowGeneratedSourcePaths && !cfg.ignoreSubjects.includes(SYNC_MESSAGE)) {
+    throw new Error('Generated source paths require the exact sync commit exclusion');
   }
   return cfg;
 }
