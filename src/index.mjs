@@ -226,3 +226,29 @@ export function initializeConfig(root, options = {}) {
   writeFileSync(dest,JSON.stringify(cfg,null,2)+'\n');
   return cfg;
 }
+
+/**
+ * Backwards-compatible release resolver for PFx website and studio builds.
+ * Retains the original public JSON contract: app commit/date refer to HEAD,
+ * while only first-parent commits changing configured paths advance the version.
+ */
+export function resolveApplicationRelease(root, raw) {
+  root = resolve(root);
+  requireObject(raw, 'application release config');
+  const cfg = validateConfig({
+    schemaVersion: 1, kind: 'app', product: raw.product,
+    channel: raw.channel, baseVersion: raw.baseVersion,
+    baseline: raw.baseline, sourcePaths: raw.sourcePaths,
+    jsonVersions: [], changelogPath: false, ignoreSubjects: [],
+    allowGeneratedSourcePaths: true
+  });
+  if (!['Alpha', 'Beta', 'Stable'].includes(cfg.channel)) throw new Error('Invalid application release channel');
+  const { commits } = readGitHistory(root, cfg);
+  const version = advanceVersion(cfg.baseVersion, commits.length);
+  return {
+    schemaVersion: 1, product: cfg.product, channel: cfg.channel, version,
+    label: cfg.channel + ' ' + version,
+    commit: git(root, 'rev-parse', 'HEAD'),
+    sourceDate: git(root, 'show', '-s', '--format=%cI', 'HEAD')
+  };
+}

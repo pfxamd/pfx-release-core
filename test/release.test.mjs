@@ -4,7 +4,7 @@ import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {execFileSync} from 'node:child_process';
-import {advanceVersion,parseVersion,validateConfig,initializeConfig,getRelease,resolveFiles,syncFiles,renderBadge,renderChangelog} from '../src/index.mjs';
+import {advanceVersion,parseVersion,validateConfig,initializeConfig,getRelease,resolveFiles,syncFiles,renderBadge,renderChangelog,resolveApplicationRelease as sharedResolveApplicationRelease} from '../src/index.mjs';
 import {syncCargoManifest,syncCargoLock} from '../src/manifests.mjs';
 
 function withGitRepo(fn) {
@@ -110,3 +110,22 @@ test('Cargo package manifests and lockfile preserve separate dependencies',async
  assert.match(syncCargoLock(lock,'1.0.2',new Set(['core-a'])),/name = "core-a"\nversion = "1.0.2"/);
  assert.match(syncCargoLock(lock,'1.0.2',new Set(['core-a'])),/name = "other"\nversion = "2.0.0"/);
 });
+
+test('Application adapter matches historic source-path versioning and public shape',()=>withGitRepo(({dir,commit,git})=>{
+ const {resolveApplicationRelease} = {resolveApplicationRelease: sharedResolveApplicationRelease};
+ const first=git('rev-parse','HEAD');
+ const config={
+  product:'PFx Test Studio', channel:'Alpha',
+  baseline:first, baseVersion:'0.1.0-alpha.22',sourcePaths:['src','scripts','release.config.json']
+ };
+ const current=resolveApplicationRelease(dir,config);
+ assert.deepEqual(Object.keys(current),['schemaVersion','product','channel','version','label','commit','sourceDate']);
+ assert.equal(current.version,'0.1.0-alpha.22');
+ mkdirSync(join(dir,'scripts'));writeFileSync(join(dir,'scripts','release.js'),'sample');
+ commit('refactor: app release integration');
+ const changed=resolveApplicationRelease(dir,config);
+ assert.equal(changed.version,'0.1.0-alpha.23');
+ assert.equal(changed.commit,git('rev-parse','HEAD'));
+ assert.equal(resolveApplicationRelease(dir,{...config,baseVersion:'1.2.3'}).version,'1.2.4');
+ assert.throws(()=>resolveApplicationRelease(dir,{...config,channel:'RC'}));
+}));
