@@ -240,7 +240,7 @@ export function resolveApplicationRelease(root, raw) {
     channel: raw.channel, baseVersion: raw.baseVersion,
     baseline: raw.baseline, sourcePaths: raw.sourcePaths,
     jsonVersions: [], changelogPath: false, ignoreSubjects: [],
-    allowGeneratedSourcePaths: true
+    allowGeneratedSourcePaths: false
   });
   if (!['Alpha', 'Beta', 'Stable'].includes(cfg.channel)) throw new Error('Invalid application release channel');
   const { commits } = readGitHistory(root, cfg);
