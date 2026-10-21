@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "product": "Example PFx Core",
+  "kind": "core",
+  "channel": "Alpha",
+  "baseVersion": "0.1.0-alpha.0",
+  "baseline": "0000000000000000000000000000000000000000",
+  "sourcePaths": [
+    "src",
+    "bin",
+    "test"
+  ],
+  "jsonVersions": [
+    "package.json"
+  ],
+  "metadataPath": "version.json",
+  "badgePath": "version-badge.svg",
+  "changelogPath": "CHANGELOG.md",
+  "ignoreSubjects": [
+    "chore(release): sync core version metadata [skip ci]"
+  ]
+}

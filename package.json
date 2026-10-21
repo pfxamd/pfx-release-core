@@ -1,0 +1,26 @@
+{
+  "name": "@pfxamd/release-core",
+  "version": "0.1.0-alpha.0",
+  "description": "Framework-independent release metadata and version management engine for PFx projects",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "pfx-release": "./bin/pfx-release.mjs"
+  },
+  "exports": {
+    ".": "./src/index.mjs"
+  },
+  "files": [
+    "src/",
+    "bin/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check src/index.mjs && node --check bin/pfx-release.mjs && npm test"
+  }
+}
