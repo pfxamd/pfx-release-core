@@ -1,0 +1,57 @@
+name: Verify and sync release
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-core-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify source and release metadata
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate code
+        run: npm run check
+      - name: Generate metadata
+        run: node bin/pfx-release.mjs sync
+      - name: Verify generated metadata
+        run: node bin/pfx-release.mjs check
+      - name: Verify distributable
+        run: npm pack --dry-run
+      - name: Publish synced files on main
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -- package.json version.json version-badge.svg CHANGELOG.md
+          if git diff --cached --quiet; then
+            echo "Release metadata is up to date."
+            exit 0
+          fi
+          git fetch origin main
+          if [ "$(git rev-parse origin/main)" != "$(git rev-parse HEAD)" ]; then
+            echo "Main changed while verifying; its new workflow will handle metadata."
+            exit 0
+          fi
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'chore(release): sync core version metadata [skip ci]'
+          git push origin HEAD:main
