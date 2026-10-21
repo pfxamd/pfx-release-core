@@ -50,3 +50,7 @@ npm run check
 Release and deployment automation are **separate**: this core produces metadata and checks consistency without introducing GitHub Actions or rewriting existing project workflows.
 
 Alpha foundation. Copyright 2026 PFxamd. Apache-2.0.
+
+## Multi-package and Rust consumers
+
+`jsonVersions` updates declared JSON manifests (including workspace packages). `npmLocks` updates root and named local workspace package versions without changing external `node_modules` entries. `cargoVersions` supports `[package]` and `[workspace.package]` versions in TOML, while `cargoNames` plus names discovered from listed manifests restrict `cargoLocks` updates to selected local crates. Lockfiles explicitly listed but absent are skipped. Set `changelogPath: false` to preserve an existing hand-maintained changelog. Configuration remains opt-in, so existing consumers are not rewritten implicitly.

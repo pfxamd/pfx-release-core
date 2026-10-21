@@ -5,6 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {advanceVersion,parseVersion,validateConfig,initializeConfig,getRelease,resolveFiles,syncFiles,renderBadge,renderChangelog} from '../src/index.mjs';
+import {syncCargoManifest,syncCargoLock} from '../src/manifests.mjs';
 
 function withGitRepo(fn) {
   const dir=mkdtempSync(join(tmpdir(),'pfx-release-'));
@@ -69,4 +70,43 @@ test('Bot subject excluded even if its commit modifies source',()=>withGitRepo((
 test('SVG content safely escaped',()=>{
  const svg=renderBadge({kind:'core',channel:'Stable',label:'<unsafe & "label">'});
  assert.match(svg,/&lt;unsafe &amp; &quot;label&quot;&gt;/);
+});
+
+
+test('Package manifests, npm locks and Cargo workspace versions synchronize without touching external dependencies',()=>withGitRepo(({dir})=>{
+ const root=join(dir,'Cargo.toml');
+ const manifest='[workspace]\nmembers = ["member"]\n\n[workspace.package]\nversion = "0.3.0"\nedition = "2024"\n\n[workspace.lints.rust]\nunsafe_code = "forbid"\n';
+ writeFileSync(root,manifest);
+ writeFileSync(join(dir,'Cargo.lock'),'version = 3\n\n[[package]]\nname = "pfx"\nversion = "0.3.0"\n\n[[package]]\nname = "external"\nversion = "9.2.0"\n');
+ writeFileSync(join(dir,'package-lock.json'),JSON.stringify({
+  name:'test',version:'0.3.0',packages:{'':{name:'test',version:'0.3.0'},'node_modules/external':{name:'external',version:'9.2.0'}}
+ }));
+ assert.match(syncCargoManifest(manifest,'0.3.1'),/version = "0.3.1"/);
+ assert.match(syncCargoLock(readFileSync(join(dir,'Cargo.lock'),'utf8'),'0.3.1',new Set(['pfx'])),/name = "pfx"\nversion = "0.3.1"/);
+ const cfg=validateConfig({schemaVersion:1,kind:'core',product:'PFx',channel:'Alpha',
+   baseVersion:'0.3.0',baseline:'a'.repeat(40),sourcePaths:['src'],jsonVersions:['package.json'],
+   cargoVersions:['Cargo.toml'],cargoLocks:['Cargo.lock'],cargoNames:['pfx'],npmLocks:['package-lock.json'],
+   changelogPath:false});
+ const release={version:'0.3.1',kind:'core',label:'Alpha 0.3.1',channel:'Alpha'};
+ const files=resolveFiles(dir,cfg,release,[]);
+ assert.equal(files.has('CHANGELOG.md'),false);
+ assert.equal(JSON.parse(files.get('package-lock.json')).packages['node_modules/external'].version,'9.2.0');
+ assert.equal(JSON.parse(files.get('package-lock.json')).version,'0.3.1');
+ assert.match(files.get('Cargo.toml'),/version = "0.3.1"/);
+ assert.match(files.get('Cargo.lock'),/name = "external"\nversion = "9.2.0"/);
+ assert.match(files.get('Cargo.lock'),/name = "pfx"\nversion = "0.3.1"/);
+ assert.ok(syncFiles(dir,files).length);
+ assert.deepEqual(syncFiles(dir,files,true),[]);
+}));
+
+test('Cargo package manifests and lockfile preserve separate dependencies',async()=>{
+ const {syncCargoManifest,syncCargoLock,readCargoPackageName}=await import('../src/manifests.mjs');
+ const source='[package]\nname = "core-a"\nversion = "1.0.0"\n[dependencies]\nother = "2.0.0"\n';
+ assert.equal(readCargoPackageName(source),'core-a');
+ assert.match(syncCargoManifest(source,'1.0.2'),/version = "1.0.2"/);
+ assert.match(syncCargoManifest(source,'1.0.2'),/other = "2.0.0"/);
+ assert.throws(()=>syncCargoManifest('[workspace]\nresolver="2"\n','1.0.2'));
+ const lock='[[package]]\nname = "core-a"\nversion = "1.0.0"\n\n[[package]]\nname = "other"\nversion = "2.0.0"\n';
+ assert.match(syncCargoLock(lock,'1.0.2',new Set(['core-a'])),/name = "core-a"\nversion = "1.0.2"/);
+ assert.match(syncCargoLock(lock,'1.0.2',new Set(['core-a'])),/name = "other"\nversion = "2.0.0"/);
 });

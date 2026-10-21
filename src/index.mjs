@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, lstatSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
+import { readCargoPackageName, syncCargoLock, syncCargoManifest, syncNpmLock } from './manifests.mjs';
 
 export const SYNC_MESSAGE = 'chore(release): sync core version metadata [skip ci]';
 const VERSION_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
@@ -53,22 +54,25 @@ export function validateConfig(raw) {
     schemaVersion: raw.schemaVersion, product: raw.product, kind: raw.kind || 'core',
     channel: raw.channel, baseVersion: raw.baseVersion, baseline: raw.baseline,
     sourcePaths: raw.sourcePaths, jsonVersions: raw.jsonVersions || [],
+    cargoVersions: raw.cargoVersions || [], cargoLocks: raw.cargoLocks || [],
+    cargoNames: raw.cargoNames || [], npmLocks: raw.npmLocks || [],
     metadataPath: raw.metadataPath || 'version.json', badgePath: raw.badgePath || 'version-badge.svg',
-    changelogPath: raw.changelogPath || 'CHANGELOG.md', ignoreSubjects: raw.ignoreSubjects || [SYNC_MESSAGE],
+    changelogPath: raw.changelogPath === false ? false : (raw.changelogPath || 'CHANGELOG.md'), ignoreSubjects: raw.ignoreSubjects || [SYNC_MESSAGE],
     allowGeneratedSourcePaths: raw.allowGeneratedSourcePaths === true
   };
   if (cfg.schemaVersion !== 1 || !['core','app','library'].includes(cfg.kind) ||
       typeof cfg.product !== 'string' || !cfg.product.trim() || !CHANNELS.has(cfg.channel) ||
       !SHA_PATTERN.test(cfg.baseline)) throw new Error('Invalid release configuration fields');
   parseVersion(cfg.baseVersion);
-  for (const name of ['sourcePaths','jsonVersions','ignoreSubjects']) {
+  for (const name of ['sourcePaths','jsonVersions','ignoreSubjects','cargoVersions','cargoLocks','cargoNames','npmLocks']) {
     if (!Array.isArray(cfg[name])) throw new Error('Invalid ' + name);
   }
   if (!cfg.sourcePaths.length || cfg.sourcePaths.some(p => !safePath(p)) ||
-      cfg.jsonVersions.some(p => !safePath(p)) ||
-      [cfg.metadataPath,cfg.badgePath,cfg.changelogPath].some(p => !safePath(p)) ||
-      cfg.ignoreSubjects.some(s => typeof s !== 'string')) throw new Error('Unsafe or empty release paths');
-  const outputs = [cfg.metadataPath,cfg.badgePath,cfg.changelogPath,...cfg.jsonVersions];
+      [...cfg.jsonVersions,...cfg.cargoVersions,...cfg.cargoLocks,...cfg.npmLocks].some(p => !safePath(p)) ||
+      [cfg.metadataPath,cfg.badgePath,...(cfg.changelogPath === false ? [] : [cfg.changelogPath])].some(p => !safePath(p)) ||
+      cfg.ignoreSubjects.some(s => typeof s !== 'string') || cfg.cargoNames.some(n => typeof n !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(n))) throw new Error('Unsafe or empty release paths');
+  const outputs = [cfg.metadataPath,cfg.badgePath,...(cfg.changelogPath === false ? [] : [cfg.changelogPath]),
+    ...cfg.jsonVersions,...cfg.cargoVersions,...cfg.cargoLocks,...cfg.npmLocks];
   if (new Set(outputs).size !== outputs.length) throw new Error('Duplicate release output paths');
   if (!cfg.allowGeneratedSourcePaths && outputs.some(path => cfg.sourcePaths.some(src => path === src || path.startsWith(src + '/')))) {
     throw new Error('Generated release output is inside sourcePaths');
@@ -144,12 +148,31 @@ export function resolveFiles(root, config, release, commits) {
   const json = value => JSON.stringify(value, null, 2) + '\n';
   paths.set(config.metadataPath, json(release));
   paths.set(config.badgePath, renderBadge(release));
-  paths.set(config.changelogPath, renderChangelog(release, commits));
+  if (config.changelogPath !== false) paths.set(config.changelogPath, renderChangelog(release, commits));
+  const packageNames = new Set();
   for (const name of config.jsonVersions) {
     const original = JSON.parse(readFileSync(checkedPath(root, name),'utf8'));
     requireObject(original, name);
+    if (typeof original.name === 'string') packageNames.add(original.name);
     original.version = release.version;
     paths.set(name, json(original));
+  }
+  const cargoNames = new Set(config.cargoNames);
+  for (const name of config.cargoVersions) {
+    const input = readFileSync(checkedPath(root, name), 'utf8');
+    const crate = readCargoPackageName(input);
+    if (crate) cargoNames.add(crate);
+    paths.set(name, syncCargoManifest(input, release.version));
+  }
+  for (const name of config.npmLocks) {
+    const lock = JSON.parse(readFileSync(checkedPath(root, name), 'utf8'));
+    paths.set(name, json(syncNpmLock(lock, release.version, packageNames)));
+  }
+  for (const name of config.cargoLocks) {
+    const location = checkedPath(root, name);
+    if (existsSync(location)) {
+      paths.set(name, syncCargoLock(readFileSync(location, 'utf8'), release.version, cargoNames));
+    }
   }
   for (const path of paths.keys()) checkedPath(root,path);
   return paths;
