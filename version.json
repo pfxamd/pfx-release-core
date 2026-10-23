@@ -3,8 +3,8 @@
   "kind": "core",
   "product": "PFx Release Core",
   "channel": "Alpha",
-  "version": "0.1.0-alpha.4",
-  "label": "Alpha 0.1.0-alpha.4",
-  "commit": "25b1596cf17cd4cb3afe2502e8b3fdda98bb78a5",
-  "sourceDate": "2026-10-21T22:11:43+01:00"
+  "version": "0.1.0-alpha.5",
+  "label": "Alpha 0.1.0-alpha.5",
+  "commit": "9a0c5ed4b2014714231e2242b3830e0e270a3499",
+  "sourceDate": "2026-10-23T21:23:55+01:00"
 }
