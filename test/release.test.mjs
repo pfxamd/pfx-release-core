@@ -4,7 +4,7 @@ import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {execFileSync} from 'node:child_process';
-import {advanceVersion,parseVersion,validateConfig,initializeConfig,getRelease,resolveFiles,syncFiles,renderBadge,renderChangelog,resolveApplicationRelease as sharedResolveApplicationRelease} from '../src/index.mjs';
+import {advanceVersion,parseVersion,validateConfig,initializeConfig,getRelease,resolveFiles,syncFiles,renderBadge,renderChangelog,resolveApplicationRelease as sharedResolveApplicationRelease,resolveWebsiteRelease} from '../src/index.mjs';
 import {syncCargoManifest,syncCargoLock} from '../src/manifests.mjs';
 
 function withGitRepo(fn) {
@@ -128,4 +128,20 @@ test('Application adapter matches historic source-path versioning and public sha
  assert.equal(changed.commit,git('rev-parse','HEAD'));
  assert.equal(resolveApplicationRelease(dir,{...config,baseVersion:'1.2.3'}).version,'1.2.4');
  assert.throws(()=>resolveApplicationRelease(dir,{...config,channel:'RC'}));
+}));
+
+test('website metadata distinguishes a source version from a metadata-only build', () => withGitRepo(({dir,git,commit}) => {
+  const config = initializeConfig(dir, {product:'Site',kind:'app',channel:'Stable',base:'1.0.0',source:'src'});
+  writeFileSync(join(dir,'src','site.txt'),'one'); commit('feat: a website feature');
+  const first = resolveWebsiteRelease(dir);
+  assert.equal(first.version,'1.0.1');
+  assert.equal(first.buildCommit,first.commit);
+  assert.equal(first.changes[0].version,'1.0.1');
+  assert.equal(first.changes[0].summary,'feat: a website feature');
+  writeFileSync(join(dir,'notes.txt'),'metadata only'); commit('docs: notes');
+  const next = resolveWebsiteRelease(dir);
+  assert.equal(next.version,first.version);
+  assert.equal(next.commit,first.commit);
+  assert.notEqual(next.buildCommit,first.buildCommit);
+  assert.deepEqual(resolveWebsiteRelease(dir),next);
 }));

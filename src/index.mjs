@@ -252,3 +252,18 @@ export function resolveApplicationRelease(root, raw) {
     sourceDate: git(root, 'show', '-s', '--format=%cI', 'HEAD')
   };
 }
+
+/** Website metadata is embedded during the build; no Git access is needed at runtime. */
+export function resolveWebsiteRelease(root, location = '.pfx/release.json') {
+  const {config, history, release} = getRelease(root, location);
+  return {
+    ...release,
+    buildCommit: git(resolve(root), 'rev-parse', 'HEAD'),
+    changes: history.commits.slice(0, 30).map((item, index) => ({
+      version: advanceVersion(config.baseVersion, history.commits.length - index),
+      commit: item.sha,
+      sourceDate: item.date,
+      summary: item.subject
+    }))
+  };
+}

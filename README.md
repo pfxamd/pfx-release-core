@@ -54,3 +54,7 @@ Alpha foundation. Copyright 2026 PFxamd. Apache-2.0.
 ## Multi-package and Rust consumers
 
 `jsonVersions` updates declared JSON manifests (including workspace packages). `npmLocks` updates root and named local workspace package versions without changing external `node_modules` entries. `cargoVersions` supports `[package]` and `[workspace.package]` versions in TOML, while `cargoNames` plus names discovered from listed manifests restrict `cargoLocks` updates to selected local crates. Lockfiles explicitly listed but absent are skipped. Set `changelogPath: false` to preserve an existing hand-maintained changelog. Configuration remains opt-in, so existing consumers are not rewritten implicitly.
+
+## Website builds
+
+`resolveWebsiteRelease(root, configPath)` returns the usual source-derived release plus `buildCommit` (the exact build HEAD) and up to 30 recent source changes with their derived versions. Embed this result in the website during its build; never resolve it against a remote branch at browser runtime. Existing APIs and version rules remain unchanged. Production builds need full history and must fail rather than publish a guessed version. Deployment promotion remains the hosting provider's responsibility.
